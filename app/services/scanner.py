@@ -315,6 +315,12 @@ class FaceDeepfakeScannerService:
         return result
 
     def scan_audio_file(self, file_path: str, filename: str) -> dict:
+        from app.models.deepfake_voice import _SCIPY_OK
+        if not _SCIPY_OK:
+            raise ValueError(
+                "Audio deepfake verification is not supported in this serverless deployment (missing SciPy). "
+                "Please run Veritas AI locally to use voice scanning."
+            )
 
         scan_id = uuid.uuid4().hex
 
@@ -439,24 +445,19 @@ class FaceDeepfakeScannerService:
         voice_breakdown = None
 
         if audio_extracted:
-
-            import scipy.io.wavfile as wav
-
-            try:
-
-                rate, data = wav.read(wav_filepath)
-
-                from app.models.deepfake_voice import DeepfakeVoiceDetector
-
-                voice_detector = DeepfakeVoiceDetector()
-
-                voice_score, voice_breakdown = voice_detector.predict(rate, data)
-
-            except Exception as e:
-
-                print(f"Error analyzing extracted video audio: {e}")
-
+            from app.models.deepfake_voice import _SCIPY_OK
+            if not _SCIPY_OK:
                 audio_extracted = False
+            else:
+                import scipy.io.wavfile as wav
+                try:
+                    rate, data = wav.read(wav_filepath)
+                    from app.models.deepfake_voice import DeepfakeVoiceDetector
+                    voice_detector = DeepfakeVoiceDetector()
+                    voice_score, voice_breakdown = voice_detector.predict(rate, data)
+                except Exception as e:
+                    print(f"Error analyzing extracted video audio: {e}")
+                    audio_extracted = False
 
         frames_list = []
 

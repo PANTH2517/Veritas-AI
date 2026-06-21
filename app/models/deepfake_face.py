@@ -32,11 +32,39 @@ class DeepfakeFaceDetector:
         self.base_session  = None
         self._onnx_mode    = False
 
-        # Try loading the ONNX models using OpenCV's DNN module
-        if os.path.exists(BASE_MODEL_FILE) and os.path.exists(MODEL_FILE):
+        # Determine model file paths (use local if exists, else download to /tmp)
+        base_model_path = BASE_MODEL_FILE
+        deep_model_path = MODEL_FILE
+
+        if not os.path.exists(base_model_path) or not os.path.exists(deep_model_path):
+            # If models are not bundled, download them dynamically to /tmp
+            tmp_base = "/tmp/base_model.onnx"
+            tmp_deep = "/tmp/deep_model.onnx"
             try:
-                self.base_session = cv2.dnn.readNetFromONNX(BASE_MODEL_FILE)
-                self.deep_session = cv2.dnn.readNetFromONNX(MODEL_FILE)
+                import urllib.request
+                os.makedirs("/tmp", exist_ok=True)
+                if not os.path.exists(tmp_base):
+                    print("[DeepfakeFaceDetector] Downloading base_model.onnx from GitHub...")
+                    urllib.request.urlretrieve(
+                        "https://raw.githubusercontent.com/PANTH2517/Veritas-AI/main/data/base_model.onnx",
+                        tmp_base
+                    )
+                if not os.path.exists(tmp_deep):
+                    print("[DeepfakeFaceDetector] Downloading deep_model.onnx from GitHub...")
+                    urllib.request.urlretrieve(
+                        "https://raw.githubusercontent.com/PANTH2517/Veritas-AI/main/data/deep_model.onnx",
+                        tmp_deep
+                    )
+                base_model_path = tmp_base
+                deep_model_path = tmp_deep
+            except Exception as e:
+                print(f"[DeepfakeFaceDetector] Failed to download ONNX models to /tmp: {e}")
+
+        # Try loading the ONNX models using OpenCV's DNN module
+        if os.path.exists(base_model_path) and os.path.exists(deep_model_path):
+            try:
+                self.base_session = cv2.dnn.readNetFromONNX(base_model_path)
+                self.deep_session = cv2.dnn.readNetFromONNX(deep_model_path)
                 self._onnx_mode = True
                 print("[DeepfakeFaceDetector] ONNX models loaded successfully using OpenCV DNN.")
             except Exception as e:

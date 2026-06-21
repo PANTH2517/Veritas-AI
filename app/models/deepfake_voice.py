@@ -1,7 +1,14 @@
 import os
 import numpy as np
-import scipy.io.wavfile as wav
-import scipy.signal as signal
+
+try:
+    import scipy.io.wavfile as wav
+    import scipy.signal as signal
+    _SCIPY_OK = True
+except ImportError:
+    wav = None
+    signal = None
+    _SCIPY_OK = False
 
 WEIGHTS_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
@@ -64,6 +71,8 @@ class DeepfakeVoiceDetector:
         """Extract spectral features from raw audio data.
         Assumes rate is 16000 and data is a 1D numpy float or int array.
         """
+        if not _SCIPY_OK:
+            raise RuntimeError("SciPy is not installed. Audio features extraction is unavailable.")
         if data is None or len(data) == 0:
             return np.zeros(6, dtype=np.float32)
             
