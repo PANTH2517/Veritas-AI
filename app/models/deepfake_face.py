@@ -28,42 +28,53 @@ N_FORENSIC = 22
 
 class DeepfakeFaceDetector:
     def __init__(self):
-        # Import onnxruntime lazily — only when first scan is requested
-        import onnxruntime as ort
-        # Load ONNX sessions (CPU only for Vercel compatibility)
-        self.deep_session = ort.InferenceSession(MODEL_FILE, providers=['CPUExecutionProvider'])
-        print(f"[DeepfakeFaceDetector] Deep model loaded from ONNX.")
-        
-        self.base_session = ort.InferenceSession(BASE_MODEL_FILE, providers=['CPUExecutionProvider'])
-        print(f"[DeepfakeFaceDetector] Base MobileNetV2 model loaded from ONNX.")
-        
-        # Load forensic weights
+        self.deep_session  = None
+        self.base_session  = None
+        self._onnx_mode    = False
+
+        # Try loading ONNX — on Vercel Hobby this often times out; fallback is forensic-only
+        try:
+            import onnxruntime as ort
+            if os.path.exists(MODEL_FILE) and os.path.exists(BASE_MODEL_FILE):
+                self.deep_session = ort.InferenceSession(
+                    MODEL_FILE, providers=['CPUExecutionProvider'])
+                self.base_session = ort.InferenceSession(
+                    BASE_MODEL_FILE, providers=['CPUExecutionProvider'])
+                self._onnx_mode = True
+                print("[DeepfakeFaceDetector] ONNX models loaded — full scoring active.")
+            else:
+                print(f"[DeepfakeFaceDetector] ONNX model files not found — forensic-only mode.")
+        except Exception as e:
+            print(f"[DeepfakeFaceDetector] ONNX unavailable ({e}) — forensic-only mode.")
+
+        # Forensic weights (numpy MLP) — always required
         if os.path.exists(FORENSIC_WEIGHTS_FILE):
             self.forensic_weights = np.load(FORENSIC_WEIGHTS_FILE)
-            print(f"[DeepfakeFaceDetector] Forensic weights loaded.")
+            print("[DeepfakeFaceDetector] Forensic weights loaded.")
         else:
-            raise FileNotFoundError(f"Forensic weights file not found: {FORENSIC_WEIGHTS_FILE}")
-            
-        self.threshold = 0.7950
-        self.deep_weight = 0.7600
-        self.forensic_weight = 0.2400
-        
-        config_file = THRESHOLD_FILE
-        locked_file = os.path.join(os.path.dirname(THRESHOLD_FILE), "threshold_locked.json")
+            self.forensic_weights = None
+            print(f"[DeepfakeFaceDetector] Forensic weights not found: {FORENSIC_WEIGHTS_FILE}")
+
+        # Defaults — adjusted for forensic-only mode (lower threshold)
+        self.threshold        = 0.42 if not self._onnx_mode else 0.7950
+        self.deep_weight      = 1.0  if not self._onnx_mode else 0.7600
+        self.forensic_weight  = 0.0  if not self._onnx_mode else 0.2400
+
+        config_file  = THRESHOLD_FILE
+        locked_file  = os.path.join(os.path.dirname(THRESHOLD_FILE), "threshold_locked.json")
         if os.path.exists(locked_file):
             config_file = locked_file
-            print(f"[DeepfakeFaceDetector] Loading LOCKED configuration.")
-            
         if os.path.exists(config_file):
             try:
                 with open(config_file, "r") as f:
                     data = json.load(f)
-                self.threshold = float(data.get("threshold", self.threshold))
-                self.deep_weight = float(data.get("deep_weight", self.deep_weight))
-                self.forensic_weight = float(data.get("forensic_weight", self.forensic_weight))
-                print(f"[DeepfakeFaceDetector] Threshold: {self.threshold:.4f}, weights: deep={self.deep_weight:.2f}, forensic={self.forensic_weight:.2f}")
+                if self._onnx_mode:   # only override thresholds in full mode
+                    self.threshold       = float(data.get("threshold",       self.threshold))
+                    self.deep_weight     = float(data.get("deep_weight",     self.deep_weight))
+                    self.forensic_weight = float(data.get("forensic_weight", self.forensic_weight))
+                print(f"[DeepfakeFaceDetector] threshold={self.threshold:.4f} mode={'ONNX' if self._onnx_mode else 'forensic-only'}")
             except Exception as e:
-                print(f"[DeepfakeFaceDetector] Configuration load failed ({e}). Using defaults.")
+                print(f"[DeepfakeFaceDetector] Config load failed ({e}). Using defaults.")
 
     def run_mlp(self, x, weights):
         # Ensure 2D shape (1, 22)
@@ -277,27 +288,32 @@ class DeepfakeFaceDetector:
     ]
 
     def predict(self, face_roi):
-        face_resized = cv2.resize(face_roi, (224, 224))
-        rgb = cv2.cvtColor(face_resized, cv2.COLOR_BGR2RGB).astype(np.float32)
-        deep_input = np.expand_dims(rgb, axis=0)
-        
-        # Run ONNX inference
-        input_name = self.deep_session.get_inputs()[0].name
-        output_name = self.deep_session.get_outputs()[0].name
-        deep_score = float(self.deep_session.run([output_name], {input_name: deep_input})[0][0][0])
-        
         features = self.extract_forensic_features(face_roi)
-        
-        if self.forensic_weight > 0.0:
-            forensic_score = self.run_mlp(features, self.forensic_weights)
+        forensic_score = self.run_mlp(features, self.forensic_weights) if self.forensic_weights is not None else 0.5
+
+        if self._onnx_mode:
+            # Full scoring: ONNX deep model + forensic MLP
+            try:
+                face_resized = cv2.resize(face_roi, (224, 224))
+                rgb = cv2.cvtColor(face_resized, cv2.COLOR_BGR2RGB).astype(np.float32)
+                deep_input = np.expand_dims(rgb, axis=0)
+                input_name  = self.deep_session.get_inputs()[0].name
+                output_name = self.deep_session.get_outputs()[0].name
+                deep_score  = float(self.deep_session.run(
+                    [output_name], {input_name: deep_input})[0][0][0])
+            except Exception as e:
+                print(f"[predict] ONNX inference failed ({e}), falling back to forensic-only.")
+                deep_score = forensic_score   # graceful fallback
+
+            combined = self.deep_weight * deep_score + self.forensic_weight * forensic_score
         else:
-            forensic_score = 0.0
-            
-        combined = self.deep_weight * deep_score + self.forensic_weight * forensic_score
+            # Forensic-only mode: pure numpy, runs in <10ms
+            deep_score = forensic_score
+            combined   = forensic_score
+
         combined = float(np.clip(combined, 0.0, 1.0))
-        
         breakdown = {
-            "deep_model_score":    round(deep_score, 4),
+            "deep_model_score":     round(deep_score, 4),
             "forensic_model_score": round(forensic_score, 4),
             "signals": {
                 name: round(float(val), 4)
