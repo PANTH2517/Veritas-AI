@@ -1,0 +1,159 @@
+{
+  "_comment": "Backend reference only. These LaTeX formulas are NOT loaded by the frontend. They document the mathematical principle behind each forensic signal used in the 22-signal MLP pipeline.",
+  "signals": [
+    {
+      "id": 1,
+      "name": "Boundary Gradient Discontinuity",
+      "category": "spatial",
+      "formula_latex": "G_B = \\nabla I(x_B)",
+      "formula_description": "Gradient of image intensity at boundary pixel x_B detects splicing seams."
+    },
+    {
+      "id": 2,
+      "name": "High-Frequency Texture Residual",
+      "category": "spatial",
+      "formula_latex": "R_H = I - L_{gaussian}(I)",
+      "formula_description": "Residual of image after Gaussian low-pass filter reveals high-frequency noise anomalies."
+    },
+    {
+      "id": 3,
+      "name": "Chroma Channel Noise Asymmetry",
+      "category": "spectral",
+      "formula_latex": "\\text{Var}(U) \\neq \\text{Var}(V)",
+      "formula_description": "Variance inequality between YUV chroma channels U and V indicates artificial compression."
+    },
+    {
+      "id": 4,
+      "name": "Eye/Mouth Sharpness Mismatch",
+      "category": "spatial",
+      "formula_latex": "\\Delta S = \\text{Blur}(E) - \\text{Blur}(M)",
+      "formula_description": "Difference in blur measurement between eye region E and mouth region M."
+    },
+    {
+      "id": 5,
+      "name": "Local Blur / Over-Smoothing",
+      "category": "spatial",
+      "formula_latex": "\\nabla^2 I_{local} \\approx 0",
+      "formula_description": "Laplacian of local image patch approaching zero indicates artificial over-smoothing."
+    },
+    {
+      "id": 6,
+      "name": "DCT Grid Artifacts (Checkerboard)",
+      "category": "spectral",
+      "formula_latex": "\\mathcal{F}_{dct}(I) \\cdot \\mathbb{M}_{checker}",
+      "formula_description": "Inner product of DCT coefficients with a checkerboard mask reveals upsampling artifacts."
+    },
+    {
+      "id": 7,
+      "name": "Bilateral Face Asymmetry",
+      "category": "geometric",
+      "formula_latex": "D(P_{left}, P_{right}) > \\delta",
+      "formula_description": "Euclidean distance between mirrored landmark sets exceeding threshold delta flags asymmetry."
+    },
+    {
+      "id": 8,
+      "name": "Edge Density Deviation",
+      "category": "spatial",
+      "formula_latex": "\\rho_{edge} = \\| \\nabla I \\| > \\kappa",
+      "formula_description": "Magnitude of image gradient exceeding camera sensor edge density limit kappa."
+    },
+    {
+      "id": 9,
+      "name": "FFT Ring Artifacts",
+      "category": "spectral",
+      "formula_latex": "\\Phi(r) = \\int S(r, \\theta) d\\theta",
+      "formula_description": "Radial power spectrum integral over angle theta at radius r detects GAN frequency rings."
+    },
+    {
+      "id": 10,
+      "name": "Noise Floor Absence",
+      "category": "spectral",
+      "formula_latex": "P_{noise} < \\sigma_{min}",
+      "formula_description": "Power in noise band below minimum expected sensor noise floor sigma_min."
+    },
+    {
+      "id": 11,
+      "name": "LBP Texture Entropy Deficit",
+      "category": "spatial",
+      "formula_latex": "H_{LBP} = -\\sum p_i \\log_2 p_i",
+      "formula_description": "Shannon entropy of Local Binary Pattern histogram; low values indicate synthetic texture regularity."
+    },
+    {
+      "id": 12,
+      "name": "Skin Smoothness Excess",
+      "category": "spatial",
+      "formula_latex": "\\text{Var}(I_{skin}) < \\sigma^2_{natural}",
+      "formula_description": "Pixel variance in skin patch below natural skin variance threshold indicates artificial smoothing."
+    },
+    {
+      "id": 13,
+      "name": "JPEG Compression Inconsistency",
+      "category": "spectral",
+      "formula_latex": "\\mathcal{Q}(x, y) \\neq \\mathcal{Q}_{global}",
+      "formula_description": "Local block quantization matrix differs from global JPEG quantization, indicating splicing."
+    },
+    {
+      "id": 14,
+      "name": "Gradient Phase Coherence",
+      "category": "spatial",
+      "formula_latex": "\\Phi_{grad} = \\text{angle}(\\nabla I)",
+      "formula_description": "Phase angle of image gradient vector; unnatural distributions reveal synthetic generation."
+    },
+    {
+      "id": 15,
+      "name": "Co-occurrence Matrix Irregularity",
+      "category": "spatial",
+      "formula_latex": "\\sum_{i,j} P(i,j) \\cdot (i-j)^2",
+      "formula_description": "GLCM contrast feature; measures pixel pair intensity differences weighted by squared distance."
+    },
+    {
+      "id": 16,
+      "name": "Spectral Flatness Excess",
+      "category": "spectral",
+      "formula_latex": "\\text{Flatness} = \\frac{\\sqrt[N]{\\prod x_i}}{\\frac{1}{N}\\sum x_i}",
+      "formula_description": "Wiener entropy (geometric mean / arithmetic mean); high flatness contradicts real camera sensor response."
+    },
+    {
+      "id": 17,
+      "name": "Specular Highlight Abnormality",
+      "category": "geometric",
+      "formula_latex": "\\vec{R} \\cdot \\vec{V} \\neq \\vec{H}",
+      "formula_description": "Reflection vector R dot view vector V should match half-vector H under Phong lighting; mismatch flags synthetic shading."
+    },
+    {
+      "id": 18,
+      "name": "Facial Contour Over-Regularity",
+      "category": "geometric",
+      "formula_latex": "\\Delta \\kappa_C \\approx 0",
+      "formula_description": "Change in curvature kappa along facial contour C; near-zero change indicates unnaturally smooth geometry."
+    },
+    {
+      "id": 19,
+      "name": "Chromatic Aberration Absence",
+      "category": "spectral",
+      "formula_latex": "\\nabla I_{red} - \\nabla I_{blue} = 0",
+      "formula_description": "Difference in gradient magnitude between red and blue channels at edges; zero difference is physically impossible in real optics."
+    },
+    {
+      "id": 20,
+      "name": "Shadow/Lighting Directionality Loss",
+      "category": "geometric",
+      "formula_latex": "\\vec{L}_{eye} \\cdot \\vec{L}_{nose} < 1 - \\epsilon",
+      "formula_description": "Dot product of estimated light direction vectors for eye and nose regions; inconsistency flags multi-source compositing."
+    },
+    {
+      "id": 21,
+      "name": "Micro-Texture Frequency Deficit",
+      "category": "spectral",
+      "formula_latex": "\\int_{f_{high}}^{\\infty} S(f) df < \\theta",
+      "formula_description": "Integral of power spectrum above high-frequency band f_high below threshold theta indicates missing micro-pore texture."
+    },
+    {
+      "id": 22,
+      "name": "Temporal Coherence (Video Only)",
+      "category": "temporal",
+      "formula_latex": "\\text{RMSE}(F_t, F_{t-1}) > \\psi",
+      "formula_description": "Root Mean Square Error between consecutive frames F_t and F_{t-1} exceeding psi reveals face-swap frame instability."
+    }
+  ]
+}

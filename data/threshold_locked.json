@@ -1,0 +1,9 @@
+{
+  "threshold": 0.9350,
+  "deep_weight": 0.8600,
+  "forensic_weight": 0.1400,
+  "val_accuracy": 87.66,
+  "val_real_accuracy": 90.20,
+  "val_fake_accuracy": 85.12,
+  "locked": true
+}
