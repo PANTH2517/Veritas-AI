@@ -30,51 +30,36 @@ class DeepfakeFaceDetector:
     def __init__(self):
         self.deep_session  = None
         self.base_session  = None
-        self._onnx_mode    = False
+        self._onnx_mode    = False  # onnxruntime not installed; using forensic-only mode
 
-        # Try loading ONNX — on Vercel Hobby this often times out; fallback is forensic-only
-        try:
-            import onnxruntime as ort
-            if os.path.exists(MODEL_FILE) and os.path.exists(BASE_MODEL_FILE):
-                self.deep_session = ort.InferenceSession(
-                    MODEL_FILE, providers=['CPUExecutionProvider'])
-                self.base_session = ort.InferenceSession(
-                    BASE_MODEL_FILE, providers=['CPUExecutionProvider'])
-                self._onnx_mode = True
-                print("[DeepfakeFaceDetector] ONNX models loaded — full scoring active.")
-            else:
-                print(f"[DeepfakeFaceDetector] ONNX model files not found — forensic-only mode.")
-        except Exception as e:
-            print(f"[DeepfakeFaceDetector] ONNX unavailable ({e}) — forensic-only mode.")
-
-        # Forensic weights (numpy MLP) — always required
+        # Forensic weights (numpy MLP) — the only model used on Vercel
         if os.path.exists(FORENSIC_WEIGHTS_FILE):
             self.forensic_weights = np.load(FORENSIC_WEIGHTS_FILE)
-            print("[DeepfakeFaceDetector] Forensic weights loaded.")
+            print("[DeepfakeFaceDetector] Forensic weights loaded — forensic-only mode active.")
         else:
             self.forensic_weights = None
-            print(f"[DeepfakeFaceDetector] Forensic weights not found: {FORENSIC_WEIGHTS_FILE}")
+            print(f"[DeepfakeFaceDetector] WARNING: Forensic weights not found at {FORENSIC_WEIGHTS_FILE}")
 
-        # Defaults — adjusted for forensic-only mode (lower threshold)
-        self.threshold        = 0.42 if not self._onnx_mode else 0.7950
-        self.deep_weight      = 1.0  if not self._onnx_mode else 0.7600
-        self.forensic_weight  = 0.0  if not self._onnx_mode else 0.2400
+        # Threshold tuned for forensic-only mode
+        self.threshold       = 0.42
+        self.deep_weight     = 0.0
+        self.forensic_weight = 1.0
 
-        config_file  = THRESHOLD_FILE
-        locked_file  = os.path.join(os.path.dirname(THRESHOLD_FILE), "threshold_locked.json")
+        config_file = THRESHOLD_FILE
+        locked_file = os.path.join(os.path.dirname(THRESHOLD_FILE), "threshold_locked.json")
         if os.path.exists(locked_file):
             config_file = locked_file
         if os.path.exists(config_file):
             try:
                 with open(config_file, "r") as f:
                     data = json.load(f)
-                if self._onnx_mode:   # only override thresholds in full mode
-                    self.threshold       = float(data.get("threshold",       self.threshold))
-                    self.deep_weight     = float(data.get("deep_weight",     self.deep_weight))
-                    self.forensic_weight = float(data.get("forensic_weight", self.forensic_weight))
-                print(f"[DeepfakeFaceDetector] threshold={self.threshold:.4f} mode={'ONNX' if self._onnx_mode else 'forensic-only'}")
+                # Only use forensic threshold from config if present
+                if "forensic_threshold" in data:
+                    self.threshold = float(data["forensic_threshold"])
+                print(f"[DeepfakeFaceDetector] threshold={self.threshold:.4f} (forensic-only)")
             except Exception as e:
                 print(f"[DeepfakeFaceDetector] Config load failed ({e}). Using defaults.")
+
 
     def run_mlp(self, x, weights):
         # Ensure 2D shape (1, 22)
