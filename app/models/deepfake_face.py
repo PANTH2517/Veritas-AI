@@ -30,17 +30,29 @@ class DeepfakeFaceDetector:
     def __init__(self):
         self.deep_session  = None
         self.base_session  = None
-        self._onnx_mode    = False  # onnxruntime not installed; using forensic-only mode
+        self._onnx_mode    = False
 
-        # Forensic weights (numpy MLP) — the only model used on Vercel
+        # Try loading the ONNX models using OpenCV's DNN module
+        if os.path.exists(BASE_MODEL_FILE) and os.path.exists(MODEL_FILE):
+            try:
+                self.base_session = cv2.dnn.readNetFromONNX(BASE_MODEL_FILE)
+                self.deep_session = cv2.dnn.readNetFromONNX(MODEL_FILE)
+                self._onnx_mode = True
+                print("[DeepfakeFaceDetector] ONNX models loaded successfully using OpenCV DNN.")
+            except Exception as e:
+                print(f"[DeepfakeFaceDetector] Failed to load ONNX models using OpenCV DNN: {e}")
+                self.base_session = None
+                self.deep_session = None
+
+        # Forensic weights (numpy MLP)
         if os.path.exists(FORENSIC_WEIGHTS_FILE):
             self.forensic_weights = np.load(FORENSIC_WEIGHTS_FILE)
-            print("[DeepfakeFaceDetector] Forensic weights loaded — forensic-only mode active.")
+            print("[DeepfakeFaceDetector] Forensic weights loaded.")
         else:
             self.forensic_weights = None
             print(f"[DeepfakeFaceDetector] WARNING: Forensic weights not found at {FORENSIC_WEIGHTS_FILE}")
 
-        # Threshold tuned for forensic-only mode
+        # Default parameters
         self.threshold       = 0.42
         self.deep_weight     = 0.0
         self.forensic_weight = 1.0
@@ -53,10 +65,18 @@ class DeepfakeFaceDetector:
             try:
                 with open(config_file, "r") as f:
                     data = json.load(f)
-                # Only use forensic threshold from config if present
-                if "forensic_threshold" in data:
-                    self.threshold = float(data["forensic_threshold"])
-                print(f"[DeepfakeFaceDetector] threshold={self.threshold:.4f} (forensic-only)")
+                if self._onnx_mode:
+                    if "threshold" in data:
+                        self.threshold = float(data["threshold"])
+                    if "deep_weight" in data:
+                        self.deep_weight = float(data["deep_weight"])
+                    if "forensic_weight" in data:
+                        self.forensic_weight = float(data["forensic_weight"])
+                else:
+                    if "forensic_threshold" in data:
+                        self.threshold = float(data["forensic_threshold"])
+                print(f"[DeepfakeFaceDetector] Loaded config: threshold={self.threshold:.4f}, "
+                      f"deep_weight={self.deep_weight:.4f}, forensic_weight={self.forensic_weight:.4f}")
             except Exception as e:
                 print(f"[DeepfakeFaceDetector] Config load failed ({e}). Using defaults.")
 
@@ -276,18 +296,17 @@ class DeepfakeFaceDetector:
         features = self.extract_forensic_features(face_roi)
         forensic_score = self.run_mlp(features, self.forensic_weights) if self.forensic_weights is not None else 0.5
 
-        if self._onnx_mode:
-            # Full scoring: ONNX deep model + forensic MLP
+        if self._onnx_mode and self.deep_session is not None:
+            # Full scoring: ONNX deep model + forensic MLP using OpenCV DNN
             try:
                 face_resized = cv2.resize(face_roi, (224, 224))
                 rgb = cv2.cvtColor(face_resized, cv2.COLOR_BGR2RGB).astype(np.float32)
                 deep_input = np.expand_dims(rgb, axis=0)
-                input_name  = self.deep_session.get_inputs()[0].name
-                output_name = self.deep_session.get_outputs()[0].name
-                deep_score  = float(self.deep_session.run(
-                    [output_name], {input_name: deep_input})[0][0][0])
+                self.deep_session.setInput(deep_input)
+                out = self.deep_session.forward()
+                deep_score = float(out[0, 0])
             except Exception as e:
-                print(f"[predict] ONNX inference failed ({e}), falling back to forensic-only.")
+                print(f"[predict] cv2.dnn inference failed ({e}), falling back to forensic-only.")
                 deep_score = forensic_score   # graceful fallback
 
             combined = self.deep_weight * deep_score + self.forensic_weight * forensic_score
@@ -310,13 +329,19 @@ class DeepfakeFaceDetector:
     def extract_deep_features(self, face_roi):
         if face_roi is None or face_roi.size == 0:
             return np.zeros(1280, dtype=np.float32)
-        face_resized = cv2.resize(face_roi, (224, 224))
-        rgb = cv2.cvtColor(face_resized, cv2.COLOR_BGR2RGB).astype(np.float32)
-        
-        # MobileNetV2 preprocessing: scale to [-1, 1]
-        rgb_pp = (rgb / 127.5) - 1.0
-        inp = np.expand_dims(rgb_pp, axis=0)
-        
-        input_name = self.base_session.get_inputs()[0].name
-        output_name = self.base_session.get_outputs()[0].name
-        return self.base_session.run([output_name], {input_name: inp})[0][0]
+        if self.base_session is None:
+            return np.zeros(1280, dtype=np.float32)
+        try:
+            face_resized = cv2.resize(face_roi, (224, 224))
+            rgb = cv2.cvtColor(face_resized, cv2.COLOR_BGR2RGB).astype(np.float32)
+            
+            # MobileNetV2 preprocessing: scale to [-1, 1]
+            rgb_pp = (rgb / 127.5) - 1.0
+            inp = np.expand_dims(rgb_pp, axis=0)
+            
+            self.base_session.setInput(inp)
+            out = self.base_session.forward()
+            return out[0]
+        except Exception as e:
+            print(f"[extract_deep_features] cv2.dnn inference failed: {e}")
+            return np.zeros(1280, dtype=np.float32)
