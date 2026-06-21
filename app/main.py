@@ -50,6 +50,9 @@ app = FastAPI(
 
 )
 
+# Track model load status for health endpoint
+_models_status = {"loaded": False, "error": None}
+
 app.add_middleware(
 
     CORSMiddleware,
@@ -64,7 +67,21 @@ app.add_middleware(
 
 )
 
-scanner_service = FaceDeepfakeScannerService()
+# Lazy-initialize the scanner to prevent cold-start crashes on Vercel
+_scanner_service = None
+
+def get_scanner() -> FaceDeepfakeScannerService:
+    global _scanner_service, _models_status
+    if _scanner_service is None:
+        try:
+            _scanner_service = FaceDeepfakeScannerService()
+            _models_status["loaded"] = True
+            _models_status["error"] = None
+        except Exception as e:
+            _models_status["loaded"] = False
+            _models_status["error"] = str(e)
+            raise HTTPException(status_code=503, detail=f"Models failed to load: {str(e)}")
+    return _scanner_service
 
 static_path = os.path.join(os.path.dirname(__file__), "static")
 os.makedirs(static_path, exist_ok=True)
@@ -116,11 +133,13 @@ async def scan_single_file(file: UploadFile = File(...)):
 
         loop = asyncio.get_running_loop()
 
+        svc = get_scanner()
+
         result = await loop.run_in_executor(
 
-            scanner_service.executor,
+            svc.executor,
 
-            scanner_service.scan_media_file,
+            svc.scan_media_file,
 
             temp_filepath,
 
@@ -196,11 +215,13 @@ async def scan_dual_files(real_file: UploadFile = File(...), check_file: UploadF
 
         loop = asyncio.get_running_loop()
 
+        svc = get_scanner()
+
         result = await loop.run_in_executor(
 
-            scanner_service.executor,
+            svc.executor,
 
-            scanner_service.scan_dual_faces,
+            svc.scan_dual_faces,
 
             real_temp_path,
 
@@ -244,7 +265,7 @@ async def scan_dual_files(real_file: UploadFile = File(...), check_file: UploadF
 
 async def get_scan_history():
 
-    return scanner_service.get_history()
+    return get_scanner().get_history()
 
 @app.get("/api/history/{scan_id}")
 
@@ -272,7 +293,8 @@ async def delete_history_item(scan_id: str):
 
         raise HTTPException(status_code=404, detail="Scan record not found.")
 
-    scanner_service.history = [h for h in scanner_service.history if h.get("scan_id") != scan_id]
+    svc = get_scanner()
+    svc.history = [h for h in svc.history if h.get("scan_id") != scan_id]
 
     return {"status": "deleted", "scan_id": scan_id}
 
@@ -284,7 +306,8 @@ async def clear_all_history():
 
     db_clear()
 
-    scanner_service.history = []
+    if _scanner_service is not None:
+        _scanner_service.history = []
 
     return {"status": "cleared"}
 
@@ -292,6 +315,8 @@ async def clear_all_history():
 
 async def get_health():
 
+    # Always return 200 so the frontend shows ONLINE.
+    # Model load errors are reported in the response body.
     return {
 
         "status": "ONLINE",
@@ -304,7 +329,11 @@ async def get_health():
 
         "device": "CPU (ONNXRuntime / OpenCV)",
 
-        "models_loaded": {
+        "models_loaded": _models_status["loaded"],
+
+        "models_error": _models_status["error"],
+
+        "classifiers": {
 
             "face_deepfake_classifier": "MobileNetV2 + Forensic Signals (22 channels)",
 

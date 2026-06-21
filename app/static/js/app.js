@@ -189,14 +189,15 @@ function initClock() {
   tick(); setInterval(tick, 1000);
 }
 
-async function checkServerHealth() {
+async function checkServerHealth(retryCount = 0) {
   const chip    = document.getElementById('status-chip');
   const dot     = document.getElementById('status-dot');
   const txt     = document.getElementById('server-status-text');
   const badge   = document.getElementById('engine-badge');
 
   try {
-    const res  = await fetch('/api/health', { signal: AbortSignal.timeout(5000) });
+    // 20s timeout to handle Vercel cold starts (Python + ONNX can take 10-15s)
+    const res  = await fetch('/api/health', { signal: AbortSignal.timeout(20000) });
     const data = await res.json();
 
     chip.classList.remove('offline'); chip.classList.add('online');
@@ -213,6 +214,13 @@ async function checkServerHealth() {
     if (deviceEl) deviceEl.textContent   = data.device ? data.device.toUpperCase() : '—';
 
   } catch {
+    if (retryCount < 3) {
+      // Auto-retry up to 3 times with increasing delays (cold start handling)
+      const delay = (retryCount + 1) * 5000;
+      txt.textContent = `CONNECTING... (${retryCount + 1}/3)`;
+      setTimeout(() => checkServerHealth(retryCount + 1), delay);
+      return;
+    }
     chip.classList.remove('online'); chip.classList.add('offline');
     dot.style.background = 'var(--red)';
     txt.textContent = 'OFFLINE';
