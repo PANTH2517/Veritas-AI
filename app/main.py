@@ -302,7 +302,7 @@ async def get_health():
 
         "python_version": sys.version.split()[0],
 
-        "device": "CPU (TensorFlow / OpenCV)",
+        "device": "CPU (ONNXRuntime / OpenCV)",
 
         "models_loaded": {
 

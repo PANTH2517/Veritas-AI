@@ -2,115 +2,63 @@ import os
 import numpy as np
 import scipy.io.wavfile as wav
 import scipy.signal as signal
-import tensorflow as tf
 
-MODEL_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "voice_model.keras")
+WEIGHTS_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+    "data", "voice_model_weights.npz"
+)
 
 class DeepfakeVoiceDetector:
     def __init__(self):
-        # Disable GPU logs for clean console
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-        
-        # Load or Build Keras Model
-        if os.path.exists(MODEL_FILE):
-            try:
-                self.model = tf.keras.models.load_model(MODEL_FILE)
-                print(f"Loaded voice model from {MODEL_FILE}")
-            except Exception as e:
-                print(f"Failed to load Keras model: {e}. Falling back to default initialization.")
-                self.model = self._build_model()
-                self._initialize_logical_weights()
+        # Load pre-trained weights from numpy file
+        if os.path.exists(WEIGHTS_FILE):
+            self.weights = np.load(WEIGHTS_FILE)
+            print(f"Loaded voice model weights from {WEIGHTS_FILE}")
         else:
-            self.model = self._build_model()
-            try:
-                from app.database import load_voice_signatures_from_db
-                features, labels = load_voice_signatures_from_db()
-                if len(features) > 0:
-                    print("Training voice model on SQLite voice signatures...")
-                    self.train_on_data(features, labels)
-                    print("Voice model trained and saved successfully.")
-                else:
-                    self._initialize_logical_weights()
-            except Exception as e:
-                print(f"Could not train voice model on startup: {e}. Using logical weights.")
-                self._initialize_logical_weights()
+            raise FileNotFoundError(f"Voice weights file not found: {WEIGHTS_FILE}")
 
-
-    def _build_model(self):
-        """Construct a Keras neural network that classifies audio frequency anomalies."""
-        model = tf.keras.Sequential([
-            tf.keras.layers.Input(shape=(6,)),
-            tf.keras.layers.Dense(12, activation='relu'),
-            tf.keras.layers.Dense(6, activation='relu'),
-            tf.keras.layers.Dense(1, activation='sigmoid')
-        ])
-        model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-        return model
-
-    def _initialize_logical_weights(self):
-        """Initialize weights of the model to act as a logical classifier for voice anomalies."""
-        w1 = np.zeros((6, 12), dtype=np.float32)
-        w1[0, :] = 0.45  # High-frequency ratio
-        w1[1, :] = 0.40  # Phase inconsistency
-        w1[2, :] = 0.25  # Spectral flux
-        w1[3, :] = 0.20  # Centroid deviation
-        w1[4, :] = 0.20  # Rolloff deviation
-        w1[5, :] = 0.20  # Bandwidth anomaly
+    def run_mlp(self, x):
+        # Input shape (6,)
+        # Layer 0: w_0 shape (6, 12), b_0 (12,)
+        # Layer 1: w_1 shape (12, 6), b_1 (6,)
+        # Layer 2: w_2 shape (6, 1), b_2 (1,)
         
-        b1 = np.full((12,), -0.9, dtype=np.float32)
+        if len(x.shape) == 1:
+            x = np.expand_dims(x, axis=0)
+            
+        # Dense 0 + ReLU
+        w0 = self.weights['w_0']
+        b0 = self.weights['b_0']
+        x = np.dot(x, w0) + b0
+        x = np.maximum(0, x)
         
-        w2 = np.ones((12, 6), dtype=np.float32) * 0.3
-        b2 = np.full((6,), -0.3, dtype=np.float32)
+        # Dense 1 + ReLU
+        w1 = self.weights['w_1']
+        b1 = self.weights['b_1']
+        x = np.dot(x, w1) + b1
+        x = np.maximum(0, x)
         
-        w3 = np.ones((6, 1), dtype=np.float32) * 0.5
-        b3 = np.array([-0.1], dtype=np.float32)
+        # Dense 2 + Sigmoid
+        w2 = self.weights['w_2']
+        b2 = self.weights['b_2']
+        x = np.dot(x, w2) + b2
+        x = 1.0 / (1.0 + np.exp(-x))
         
-        # Break weight initialization symmetry
-        np.random.seed(42)
-        w1 = w1 + np.random.normal(0.0, 0.02, size=w1.shape).astype(np.float32)
-        w2 = w2 + np.random.normal(0.0, 0.02, size=w2.shape).astype(np.float32)
-        w3 = w3 + np.random.normal(0.0, 0.02, size=w3.shape).astype(np.float32)
-        
-        self.model.layers[0].set_weights([w1, b1])
-        self.model.layers[1].set_weights([w2, b2])
-        self.model.layers[2].set_weights([w3, b3])
+        return float(x[0, 0])
 
     def reload_weights(self):
-        """Reload the model weights from the saved Keras model file."""
-        if os.path.exists(MODEL_FILE):
+        if os.path.exists(WEIGHTS_FILE):
             try:
-                tf.keras.backend.clear_session()
-                self.model = tf.keras.models.load_model(MODEL_FILE)
-                print("Voice model reloaded successfully.")
+                self.weights = np.load(WEIGHTS_FILE)
+                print("Voice model weights reloaded successfully.")
                 return True
             except Exception as e:
                 print(f"Error reloading voice model weights: {e}")
         return False
 
     def train_on_data(self, features_matrix, labels):
-        """Train the neural network using backpropagation on the provided dataset."""
-        x_train = np.array(features_matrix, dtype=np.float32)
-        y_train = np.array(labels, dtype=np.float32)
-        
-        # Shuffle dataset before training to ensure proper validation split distribution
-        indices = np.arange(x_train.shape[0])
-        np.random.seed(42)
-        np.random.shuffle(indices)
-        x_train = x_train[indices]
-        y_train = y_train[indices]
-        
-        history = self.model.fit(
-            x_train, 
-            y_train, 
-            epochs=15, 
-            batch_size=32, 
-            validation_split=0.2, 
-            verbose=0
-        )
-        
-        os.makedirs(os.path.dirname(MODEL_FILE), exist_ok=True)
-        self.model.save(MODEL_FILE)
-        return history.history
+        print("Training is not supported in CPU/serverless inference runtime.")
+        return {}
 
     def extract_audio_features(self, rate, data):
         """Extract spectral features from raw audio data.
@@ -196,8 +144,7 @@ class DeepfakeVoiceDetector:
             feature_breakdown: dict, analysis results per feature
         """
         features = self.extract_audio_features(rate, data)
-        input_tensor = np.expand_dims(features, axis=0)
-        score = float(self.model.predict(input_tensor, verbose=0)[0][0])
+        score = self.run_mlp(features)
         
         breakdown = {
             "high_frequency_energy_anomaly": round(float(features[0]), 3),
