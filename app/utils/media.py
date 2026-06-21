@@ -18,77 +18,40 @@ except ImportError:
 
 import scipy.io.wavfile as wav
 
-CASCADE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "cache")
 
-os.makedirs(CASCADE_DIR, exist_ok=True)
+# ── Cascade files ─────────────────────────────────────────────────────────────
+# OpenCV's pip package already bundles all Haar cascades in cv2.data.haarcascades.
+# We use them directly — zero downloads, zero network calls, works on Vercel.
+_CV2_DATA = cv2.data.haarcascades  # e.g. /usr/local/lib/python3.x/site-packages/cv2/data/
 
-CASCADE_PATH       = os.path.join(CASCADE_DIR, "haarcascade_frontalface_default.xml")
+CASCADE_PATH      = os.path.join(_CV2_DATA, "haarcascade_frontalface_default.xml")
+CASCADE_SIDE_PATH = os.path.join(_CV2_DATA, "haarcascade_profileface.xml")
+CASCADE_ALT2_PATH = os.path.join(_CV2_DATA, "haarcascade_frontalface_alt2.xml")
+CASCADE_LBP_PATH  = os.path.join(_CV2_DATA, "lbpcascade_frontalface_improved.xml")
 
-CASCADE_SIDE_PATH  = os.path.join(CASCADE_DIR, "haarcascade_profileface.xml")
+# DNN SSD face detector — these are NOT bundled in cv2, download lazily to /tmp only when needed
+_TMP_DNN_DIR   = "/tmp/cv_dnn"
+DNN_PROTO_PATH  = os.path.join(_TMP_DNN_DIR, "deploy.prototxt")
+DNN_MODEL_PATH  = os.path.join(_TMP_DNN_DIR, "res10_300x300_ssd_iter_140000.caffemodel")
 
-DNN_PROTO_PATH     = os.path.join(CASCADE_DIR, "deploy.prototxt")
-
-DNN_MODEL_PATH     = os.path.join(CASCADE_DIR, "res10_300x300_ssd_iter_140000.caffemodel")
-
-CASCADE_ALT2_PATH  = os.path.join(CASCADE_DIR, "haarcascade_frontalface_alt2.xml")
-
-CASCADE_LBP_PATH   = os.path.join(CASCADE_DIR, "lbpcascade_frontalface_improved.xml")
-
-_URLS = {
-
-    CASCADE_PATH:
-
-        "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml",
-
-    CASCADE_SIDE_PATH:
-
-        "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_profileface.xml",
-
-    CASCADE_ALT2_PATH:
-
-        "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_alt2.xml",
-
-    CASCADE_LBP_PATH:
-
-        "https://raw.githubusercontent.com/opencv/opencv/master/data/lbpcascades/lbpcascade_frontalface_improved.xml",
-
+_DNN_URLS = {
     DNN_PROTO_PATH:
-
         "https://raw.githubusercontent.com/opencv/opencv/master/samples/dnn/face_detector/deploy.prototxt",
-
     DNN_MODEL_PATH:
-
         "https://github.com/opencv/opencv_3rdparty/raw/dnn_samples_face_detector_20170830/res10_300x300_ssd_iter_140000.caffemodel",
-
 }
 
-def _download(url: str, dest: str) -> bool:
-
+def _try_download_dnn():
+    """Download DNN SSD model lazily only when called. No-op if already cached."""
     try:
-
-        print(f"[media] Downloading {os.path.basename(dest)}…")
-
-        urllib.request.urlretrieve(url, dest)
-
-        print(f"[media] Downloaded {os.path.basename(dest)} OK")
-
-        return True
-
+        os.makedirs(_TMP_DNN_DIR, exist_ok=True)
+        for path, url in _DNN_URLS.items():
+            if not os.path.exists(path) or os.path.getsize(path) < 1000:
+                print(f"[media] Downloading {os.path.basename(path)}…")
+                urllib.request.urlretrieve(url, path)
+                print(f"[media] Downloaded {os.path.basename(path)} OK")
     except Exception as e:
-
-        print(f"[media] Download failed for {os.path.basename(dest)}: {e}")
-
-        return False
-
-def _ensure_assets():
-
-    for path, url in _URLS.items():
-
-        if not os.path.exists(path) or os.path.getsize(path) < 1000:
-
-            _download(url, path)
-
-_ensure_assets()
+        print(f"[media] DNN download failed (will use Haar only): {e}")
 
 _haar_front  = None
 
@@ -138,9 +101,10 @@ def _load_dnn():
 
                 print(f"[media] DNN load error: {e}")
 
+# Load Haar cascades immediately — they are bundled in cv2, no download needed.
 _load_cascades()
-
-_load_dnn()
+# DNN SSD detector skipped at startup (requires network download).
+# It will only be used if _try_download_dnn() is called explicitly.
 
 def _haar_detect(gray, cascade, scale=1.05, min_nb=3, min_sz=20):
 
