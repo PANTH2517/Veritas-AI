@@ -1,13 +1,7 @@
 {
   "version": 2,
 
-  "functions": {
-    "api/index.py": {
-      "maxDuration": 60,
-      "memory": 1024,
-      "excludeFiles": "app/static/**|data/base_model.onnx|data/deep_model.onnx"
-    }
-  },
+
   "routes": [
     {
       "src": "/static/(.*)",

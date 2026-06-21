@@ -159,3 +159,5 @@ data/uploads/*
 !data/uploads/.gitkeep
 app/static/cache/*
 !app/static/cache/.gitkeep
+
+.vercel
