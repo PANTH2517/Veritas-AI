@@ -2,7 +2,7 @@ import os
 import json
 import cv2
 import numpy as np
-import onnxruntime as ort
+# onnxruntime is imported lazily inside __init__ to avoid cold-start timeouts
 
 MODEL_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
@@ -28,8 +28,9 @@ N_FORENSIC = 22
 
 class DeepfakeFaceDetector:
     def __init__(self):
-        # Load ONNX sessions
-        # Set execution providers to CPU for Vercel compatibility
+        # Import onnxruntime lazily — only when first scan is requested
+        import onnxruntime as ort
+        # Load ONNX sessions (CPU only for Vercel compatibility)
         self.deep_session = ort.InferenceSession(MODEL_FILE, providers=['CPUExecutionProvider'])
         print(f"[DeepfakeFaceDetector] Deep model loaded from ONNX.")
         

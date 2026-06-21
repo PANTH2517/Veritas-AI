@@ -20,9 +20,21 @@ from fastapi.staticfiles import StaticFiles
 
 from fastapi.responses import FileResponse
 
-from app.services.scanner import FaceDeepfakeScannerService, UPLOAD_DIR
-
 from app.database import init_db
+
+# UPLOAD_DIR computed here so we don't need to import scanner at startup
+# (importing scanner pulls in cv2, onnxruntime, scipy — very slow on cold start)
+if os.environ.get("VERCEL") or not os.access(
+    os.path.join(os.path.dirname(__file__), "..", "data"), os.W_OK
+):
+    UPLOAD_DIR = "/tmp/uploads"
+else:
+    UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "uploads")
+try:
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+except OSError:
+    UPLOAD_DIR = "/tmp/uploads"
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @asynccontextmanager
 
@@ -70,10 +82,13 @@ app.add_middleware(
 # Lazy-initialize the scanner to prevent cold-start crashes on Vercel
 _scanner_service = None
 
-def get_scanner() -> FaceDeepfakeScannerService:
+def get_scanner():
+    """Lazily initialize the scanner — loads cv2/onnxruntime only on first scan."""
     global _scanner_service, _models_status
     if _scanner_service is None:
         try:
+            # Import here so heavy ML packages don't load at startup
+            from app.services.scanner import FaceDeepfakeScannerService
             _scanner_service = FaceDeepfakeScannerService()
             _models_status["loaded"] = True
             _models_status["error"] = None
