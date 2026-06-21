@@ -6,7 +6,15 @@ import cv2
 
 import numpy as np
 
-import av
+# PyAV (av) requires FFmpeg which is not available on Vercel.
+# We import it conditionally so image scanning still works.
+try:
+    import av
+    _AV_AVAILABLE = True
+except ImportError:
+    av = None
+    _AV_AVAILABLE = False
+    print("[media] PyAV not available — audio/video extraction disabled (image scanning unaffected).")
 
 import scipy.io.wavfile as wav
 
@@ -374,6 +382,10 @@ def extract_frames(video_path, max_frames=45):
 
 def extract_audio_from_video(video_path, output_wav_path):
 
+    if not _AV_AVAILABLE:
+        print("[media] PyAV not available — skipping audio extraction.")
+        return False
+
     try:
 
         container = av.open(video_path)
@@ -443,6 +455,10 @@ def extract_audio_from_video(video_path, output_wav_path):
         return False
 
 def decode_audio_file(audio_path, output_wav_path):
+
+    if not _AV_AVAILABLE:
+        print("[media] PyAV not available — skipping audio decode.")
+        return False
 
     try:
 
