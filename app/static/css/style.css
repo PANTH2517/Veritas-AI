@@ -1903,3 +1903,179 @@ svg { display: block; }
 .sig-badge.geometric { background: rgba(234, 179, 8, 0.15); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.25); }
 .sig-badge.temporal { background: rgba(236, 72, 153, 0.15); color: #f472b6; border: 1px solid rgba(236, 72, 153, 0.25); }
 
+/* ── ADDITIONAL MOBILE RESPONSIVENESS OVERRIDES ──────────────── */
+
+@media (max-width: 960px) {
+  /* Disable Custom Cursor on Mobile */
+  .cursor-dot, .cursor-ring {
+    display: none !important;
+  }
+  body {
+    cursor: auto !important;
+  }
+  button, a, .upload-zone, .dual-drop-zone, .ws-tab-btn, .btn-glow-primary, .btn-outline, .btn-sm {
+    cursor: pointer !important;
+  }
+
+  /* Sticky Bottom Navigation Tab Bar */
+  .masthead-center {
+    display: flex !important;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: var(--z-overlay) !important;
+    background: rgba(4, 12, 26, 0.95) !important;
+    backdrop-filter: blur(24px) saturate(1.6) !important;
+    border-top: 1px solid var(--glass-border) !important;
+    padding: 0.6rem 0.4rem !important;
+    justify-content: center !important;
+    box-shadow: 0 -8px 32px rgba(0,0,0,0.6) !important;
+    height: auto !important;
+  }
+  .ws-tab-nav {
+    display: flex !important;
+    width: 100% !important;
+    max-width: 500px !important;
+    justify-content: space-around !important;
+    gap: 0.35rem !important;
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+  }
+  .ws-tab-btn {
+    flex: 1 !important;
+    padding: 0.55rem 0.25rem !important;
+    font-size: 0.68rem !important;
+    flex-direction: column !important;
+    gap: 0.3rem !important;
+    align-items: center !important;
+    justify-content: center !important;
+    white-space: nowrap !important;
+    border-radius: var(--r-md) !important;
+  }
+  .ws-tab-btn svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+  .ws-tab-btn span {
+    font-size: 0.62rem !important;
+    letter-spacing: 0.2px !important;
+  }
+  
+  /* Body bottom margin to prevent navigation bar overlapping page contents */
+  body, .dashboard-grid {
+    padding-bottom: 85px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Scan Progress Panel vertical stacking */
+  .scan-progress-panel {
+    flex-direction: column !important;
+    gap: 2rem !important;
+    padding: 2rem 1.2rem !important;
+    min-height: auto !important;
+    text-align: center !important;
+  }
+  .spp-info {
+    align-items: center !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .spp-bar-track {
+    width: 100% !important;
+  }
+
+  /* HUD Visualizer Images vertical stacking */
+  .hud-side-by-side {
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+  }
+  .hud-pane {
+    width: 100% !important;
+  }
+
+  /* Dual identity match layout vertical stacking */
+  .dual-results-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Upload zone sizing */
+  .upload-zone {
+    min-height: 380px !important;
+    padding: 2rem 1.2rem !important;
+  }
+}
+
+@media (max-width: 600px) {
+  /* Header widgets compression to prevent overflow */
+  .brand-sub {
+    display: none !important;
+  }
+  .brand-block {
+    min-width: auto !important;
+  }
+  .clock-display {
+    display: none !important;
+  }
+  .status-chip span:not(.status-chip-dot) {
+    display: none !important;
+  }
+  .status-chip {
+    padding: 0.35rem 0.5rem !important;
+    gap: 0 !important;
+  }
+  .threat-chip-label {
+    display: none !important;
+  }
+  .masthead-right {
+    min-width: auto !important;
+    gap: 0.5rem !important;
+  }
+  .masthead {
+    padding: 0 1rem !important;
+    gap: 0.5rem !important;
+  }
+
+  /* Left sidebar cards layout stacking */
+  .left-sidebar {
+    grid-template-columns: 1fr !important;
+  }
+  .session-stats-card {
+    grid-column: span 1 !important;
+  }
+
+  /* Verdict banner stacking */
+  .verdict-banner {
+    flex-direction: column !important;
+    text-align: center !important;
+    gap: 1rem !important;
+    padding: 1.2rem 1rem !important;
+  }
+  .vb-text {
+    flex: none !important;
+  }
+  .vb-score-block {
+    text-align: center !important;
+  }
+}
+
+@media (max-width: 500px) {
+  /* Dual identity check preview face cards vertical stacking */
+  .dual-faces-panel {
+    flex-direction: column !important;
+    gap: 1rem !important;
+    width: 100% !important;
+    align-items: center !important;
+  }
+  .dual-face-card {
+    width: 100% !important;
+    max-width: 250px !important;
+  }
+  .dual-match-meter {
+    padding: 0.5rem 0 !important;
+  }
+}
+
+
