@@ -1967,6 +1967,17 @@ svg { display: block; }
   body, .dashboard-grid {
     padding-bottom: 85px !important;
   }
+
+  /* Stack workspace at the top and sidebars at the bottom on mobile */
+  .workspace {
+    order: 1 !important;
+  }
+  .left-sidebar {
+    order: 2 !important;
+  }
+  .right-sidebar {
+    order: 3 !important;
+  }
 }
 
 @media (max-width: 768px) {
